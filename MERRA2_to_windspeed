@@ -1,0 +1,48 @@
+def get_merra(merradir,Date_ss,Date_e):
+	Date_s = Date_ss - datetime.timedelta(days=1)
+	arr = pd.date_range(Date_s, Date_e)
+	yr_arr = arr.strftime('%Y')
+	mn_arr = arr.strftime('%m')
+	dy_arr = arr.strftime('%d')
+
+	ws_merrat = [np.zeros(24)]
+
+	print ' << Proccessing MERRA-2 data >>'
+	for l in range(len(dy_arr)):
+		print '      Reading files for: ' + dy_arr[l] +'-'+ mn_arr[l] +'-'+ yr_arr[l]
+		f_mrr = (merradir+'/MERRA2_400.tavg1_2d_slv_Nx.{}{}{}.SUB.nc4'.format(yr_arr[l],mn_arr[l],dy_arr[l]))
+		mrr_cube = iris.load(f_mrr)
+		u50 = mrr_cube[0]
+		u10 = mrr_cube[1]
+		u2 = mrr_cube[2]
+		v10 = mrr_cube[3]
+		v50 = mrr_cube[4]
+		v2 = mrr_cube[5]
+
+		ws_2 = ws_ifunc(u2, v2, new_name='wind speed')
+		ws_10 = ws_ifunc(u10, v10, new_name='wind speed')
+		ws_50 = ws_ifunc(u50, v50, new_name='wind speed')
+
+		ws_site_2 = ws_2.interpolate(windf_loc, iris.analysis.Linear())
+		ws_site_10 = ws_10.interpolate(windf_loc, iris.analysis.Linear())
+		ws_site_50 = ws_50.interpolate(windf_loc, iris.analysis.Linear())
+
+		arr = np.zeros([24,2])
+		for h in range(24):
+			fit = np.polyfit(np.log([2, 10, 50]), [ws_site_2[h].data,ws_site_10[h].data,ws_site_50[h].data], 1)
+			arr[h,0] = fit[0]
+			arr[h,1] = fit[1]
+		ws_merra = (arr[:,0] * np.log(90) + arr[:,1])
+		ws_merrat[l*24:(l*24)+(24)] = ws_merra#**Sobreescribe**Checar
+	
+	#Avg at exact hours (MERRA avg is at halfs)
+	ws_mm = np.zeros((len(dy_arr)-1)*24)
+	for m in range((len(dy_arr)-1)*24):
+		ws_mm[m] = (ws_merrat[23+m]+ws_merrat[23+m+1])/2
+
+	rng = pd.date_range(Date_ss, periods=24*(len(dy_arr)-1), freq='h')
+	ts = pd.Series(ws_mm, index=rng)
+
+	print ' << done! >>'
+	print ' '
+	return [ts,'MERRA2'],rng
