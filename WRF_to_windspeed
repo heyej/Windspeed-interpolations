@@ -1,0 +1,173 @@
+def get_wrf(wrfdir,Date_s,Date_e,grid,fr):
+	arr = pd.date_range(Date_s, Date_e)
+	yr_arr = arr.strftime('%Y')
+	mn_arr = arr.strftime('%m')
+	dy_arr = arr.strftime('%d')
+
+	ws_wrft = [np.zeros(fr*len(dy_arr))]
+	
+	print (' << Proccessing WRF grid ' + str(grid) + ' >>')
+	for l in range(len(dy_arr)):
+		print '      Reading files for: ' + dy_arr[l] +'-'+ mn_arr[l] +'-'+ yr_arr[l]
+
+		f_wrf0 = (wrfdir+'wrfout_d{}_{}-{}-{}_*'.format("%02d" % grid,yr_arr[l],mn_arr[l],dy_arr[l]))
+		U = iris.load(f_wrf0,['U'])
+		V = iris.load(f_wrf0,['V'])
+		U10 = iris.load(f_wrf0,['U10'])
+		V10 = iris.load(f_wrf0,['V10'])
+		PH = iris.load(f_wrf0,['PH'])
+		PHB = iris.load(f_wrf0,['PHB'])
+		#HGT = iris.load(f_wrf0,['HGT'])
+		
+		u1 = U[0]**1
+		v1 = V[0]**1
+		u1_10 = U10[0]**1
+		v1_10 = V10[0]**1
+		ph1 = PH[0]**1
+		phb1 = PHB[0]**1
+		#hgt1 = HGT[0]**1
+
+		iris.util.promote_aux_coord_to_dim_coord(u1, 'XTIME')
+		iris.util.promote_aux_coord_to_dim_coord(v1, 'XTIME')
+		iris.util.promote_aux_coord_to_dim_coord(u1_10, 'XTIME')
+		iris.util.promote_aux_coord_to_dim_coord(v1_10, 'XTIME')
+		iris.util.promote_aux_coord_to_dim_coord(ph1, 'XTIME')
+		iris.util.promote_aux_coord_to_dim_coord(phb1, 'XTIME')
+		#iris.util.promote_aux_coord_to_dim_coord(hgt1, 'XTIME')
+
+		for i in range(1,len(U)):
+			u2 = U[i]**1
+			v2 = V[i]**1
+			u2_10 = U10[i]**1
+			v2_10 = V10[i]**1
+			ph2 = PH[i]**1
+			phb2 = PHB[i]**1
+			#hgt2 = HGT[i]**1
+
+			iris.util.promote_aux_coord_to_dim_coord(u2, 'XTIME')
+			iris.util.promote_aux_coord_to_dim_coord(v2, 'XTIME')
+			iris.util.promote_aux_coord_to_dim_coord(u2_10, 'XTIME')
+			iris.util.promote_aux_coord_to_dim_coord(v2_10, 'XTIME')
+			iris.util.promote_aux_coord_to_dim_coord(ph2, 'XTIME')
+			iris.util.promote_aux_coord_to_dim_coord(phb2, 'XTIME')
+			#iris.util.promote_aux_coord_to_dim_coord(hgt2, 'XTIME')
+
+			list1 = iris.cube.CubeList([u1,u2])
+			u1 = list1.concatenate()[0]
+			list2 = iris.cube.CubeList([v1,v2])
+			v1 = list2.concatenate()[0]
+
+			list3 = iris.cube.CubeList([u1_10,u2_10])
+			u1_10 = list3.concatenate()[0]
+			list4 = iris.cube.CubeList([v1_10,v2_10])
+			v1_10 = list4.concatenate()[0]
+
+			list5 = iris.cube.CubeList([ph1,ph2])
+			ph1 = list5.concatenate()[0]
+			list6 = iris.cube.CubeList([phb1,phb2])
+			phb1 = list6.concatenate()[0]
+			
+			#list7 = iris.cube.CubeList([hgt1,hgt2])
+			#hgt1 = list7.concatenate()[0]
+
+
+		#Horizontal interpolation for 10 m and terrain height
+		ws_wrf_10 = ws_ifunc(u1_10, v1_10, new_name='wind speed')
+		
+		lon_us = ws_wrf_10[0,0,:].coord('longitude').points
+		lat_us = ws_wrf_10[0,:,0].coord('latitude').points
+
+		iris.cube.Cube.remove_coord(ws_wrf_10,'longitude')
+		iris.cube.Cube.remove_coord(ws_wrf_10,'latitude')
+		#iris.cube.Cube.remove_coord(hgt1,'longitude')
+		#iris.cube.Cube.remove_coord(hgt1,'latitude')
+		co_lat_us = iris.coords.DimCoord(lat_us, standard_name='latitude', long_name=None, var_name='XLAT', units='degrees', bounds=None, attributes={'stagger': '', 'MemoryOrder': 'XY ', 'FieldType': 104, 'description': 'LATITUDE, SOUTH IS NEGATIVE'}, coord_system=None, circular=False)
+		co_lon_us = iris.coords.DimCoord(lon_us, standard_name='longitude', long_name=None, var_name='XLONG', units='degrees', bounds=None, attributes={'stagger': '', 'MemoryOrder': 'XY ', 'FieldType': 104, 'description': 'LONGITUDE,WEST IS NEGATIVE'}, coord_system=None, circular=False)
+		iris.cube.Cube.add_dim_coord(ws_wrf_10,co_lat_us,1)
+		iris.cube.Cube.add_dim_coord(ws_wrf_10,co_lon_us,2)	
+		#iris.cube.Cube.add_dim_coord(hgt1,co_lat_us,1)
+		#iris.cube.Cube.add_dim_coord(hgt1,co_lon_us,2)
+
+		#hgt_site = hgt1.interpolate(windf_loc, iris.analysis.Linear())
+		ws_site_10 = ws_wrf_10.interpolate(windf_loc, iris.analysis.Linear())
+		
+		
+		#Horizontal interpolation for u, v layers
+		lon_u = u1[0,0,0,:].coord('longitude').points
+		lat_u = u1[0,0,:,0].coord('latitude').points
+		lon_v = v1[0,0,0,:].coord('longitude').points
+		lat_v = v1[0,0,:,0].coord('latitude').points
+		co_lat_u = iris.coords.DimCoord(lat_u, standard_name='latitude', long_name=None, var_name='XLAT', units='degrees', bounds=None, attributes={'stagger': '', 'MemoryOrder': 'XY ', 'FieldType': 104, 'description': 'LATITUDE, SOUTH IS NEGATIVE'}, coord_system=None, circular=False)
+		co_lon_u = iris.coords.DimCoord(lon_u, standard_name='longitude', long_name=None, var_name='XLONG', units='degrees', bounds=None, attributes={'stagger': '', 'MemoryOrder': 'XY ', 'FieldType': 104, 'description': 'LONGITUDE,WEST IS NEGATIVE'}, coord_system=None, circular=False)
+		co_lat_v = iris.coords.DimCoord(lat_v, standard_name='latitude', long_name=None, var_name='XLAT', units='degrees', bounds=None, attributes={'stagger': '', 'MemoryOrder': 'XY ', 'FieldType': 104, 'description': 'LATITUDE, SOUTH IS NEGATIVE'}, coord_system=None, circular=False)
+		co_lon_v = iris.coords.DimCoord(lon_v, standard_name='longitude', long_name=None, var_name='XLONG', units='degrees', bounds=None, attributes={'stagger': '', 'MemoryOrder': 'XY ', 'FieldType': 104, 'description': 'LONGITUDE,WEST IS NEGATIVE'}, coord_system=None, circular=False)
+
+		levels = 5	#staggered
+		ws_site = np.zeros((levels,len(u1.coord('XTIME').points)))
+		h_site = np.zeros((levels,len(u1.coord('XTIME').points)))
+
+		for i in range(0,levels):
+			uu = u1[:,i,:,:]
+			vv = v1[:,i,:,:]
+			phh = ph1[:,i,:,:]
+			phbb = phb1[:,i,:,:]
+			iris.cube.Cube.remove_coord(uu,'longitude')
+			iris.cube.Cube.remove_coord(uu,'latitude')
+			iris.cube.Cube.remove_coord(vv,'longitude')
+			iris.cube.Cube.remove_coord(vv,'latitude')
+			iris.cube.Cube.remove_coord(phh,'longitude')
+			iris.cube.Cube.remove_coord(phh,'latitude')
+			iris.cube.Cube.remove_coord(phbb,'longitude')
+			iris.cube.Cube.remove_coord(phbb,'latitude')
+
+			iris.cube.Cube.add_dim_coord(uu,co_lat_u,1)
+			iris.cube.Cube.add_dim_coord(uu,co_lon_u,2)
+			iris.cube.Cube.add_dim_coord(vv,co_lat_v,1)
+			iris.cube.Cube.add_dim_coord(vv,co_lon_v,2)
+			iris.cube.Cube.add_dim_coord(phh,co_lat_us,1)
+			iris.cube.Cube.add_dim_coord(phh,co_lon_us,2)
+			iris.cube.Cube.add_dim_coord(phbb,co_lat_us,1)
+			iris.cube.Cube.add_dim_coord(phbb,co_lon_us,2)
+
+			u_site = uu.interpolate(windf_loc, iris.analysis.Linear())
+			v_site = vv.interpolate(windf_loc, iris.analysis.Linear())
+			ph_site = phh.interpolate(windf_loc, iris.analysis.Linear())
+			phb_site = phbb.interpolate(windf_loc, iris.analysis.Linear())
+
+			ws_wrf = ws_ifunc(u_site, v_site, new_name='wind speed')
+			#h_wrf = (ph_site + phb_site)/9.81 - hgt_site.data[0]
+			h_wrf = (ph_site + phb_site)/9.81
+
+			ws_site[i,:] = ws_wrf.data
+			#h_site[i,:] = h_wrf.data #para uso con hgt
+			h_site[i,:] = h_wrf.data - h_site[0,:]
+			
+		#Unstaggering vertical grid
+		h_site[0,:] = np.zeros(len(u1.coord('XTIME').points))
+		h_site_u = np.zeros((levels-1,len(u1.coord('XTIME').points)))
+		for i in range(0,levels-1):
+			h_site_u[i,:] = (h_site[i,:] + h_site[i+1,:])/2
+		
+		#Vertical Interpolation
+		z1_ref = 10.0
+		ws_turb = np.zeros(len(ws_site[0,:]))
+
+		for i in range(len(ws_site_10.data)):
+			k=0
+			while h_site_u[k,i]<wt_height:
+				k = k+1
+			print k
+			z2_ref = h_site_u[k,i]
+			print z2_ref
+			ws_turb[i] = (ws_site[k,i]-ws_site_10.data[i]) * np.log(wt_height/z1_ref) / np.log(z2_ref/z1_ref) + ws_site_10.data[i]
+			#http://mathhelpforum.com/advanced-applied-math/132759-logarithmic-interpolation.html
+			
+		ws_wrft[l*fr:(l*fr)+(fr-1)] = ws_turb
+
+	hr_freq = 24/fr
+	fr = str(int(hr_freq))+'h'
+	rng = pd.date_range(Date_s, periods=len(ws_wrf_10.data)*len(dy_arr), freq=fr)
+	ts = pd.Series(ws_wrft, index=rng)
+	print ' << done! >>'
+	print ' '
+	return [ts,'WRF'+str(grid)],rng
