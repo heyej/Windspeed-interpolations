@@ -2,7 +2,7 @@
 
 Routines to extract wind speed from numerical models and reanalyses, and interpolate them to lat-lon and height.
 
-Codes in this repository use mainly:
+Scripts in this repository use mainly:
 
 - Python 3.7
   
