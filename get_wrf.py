@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-#  get_wrf.py
 
 """
 Extract and interpolate wind speed from WRF
