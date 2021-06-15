@@ -1,6 +1,6 @@
 # Wind speed Interpolations
 
-Routines to extract wind speed from numerical models and reanalyses, and interpolate them to lat-lon and height.
+Routines to extract wind speed from WRF and MERRA-2, and interpolate them to lat-lon and height.
 
 Scripts in this repository use mainly:
 
